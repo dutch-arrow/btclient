@@ -6,7 +6,7 @@
 
 	<properties>
 		<main.class>nl.das.btclient.BTClient</main.class>
-		<progName>btclient</progName>
+		<progName>tcubttester</progName>
 	</properties>
 
 	<dependencies>
