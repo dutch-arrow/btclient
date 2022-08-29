@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+    <head>
+	    <!-- Required meta tags -->
+	    <meta charset="utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	    <meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Do not cache this page -->
+		<meta http-equiv="cache-control" content="max-age=0">
+		<meta http-equiv="cache-control" content="no-cache">
+		<meta http-equiv="expires" content="-1">
+		<meta http-equiv="expires" content="Tue, 01 Jan 1980 11:00:00 GMT">
+		<meta http-equiv="pragma" content="no-cache">
+
+		<!-- Load required Bootstrap and BootstrapVue CSS -->
+		<link type="text/css" rel="stylesheet" href="https://unpkg.com/bootstrap/dist/css/bootstrap.min.css" />
+		<link type="text/css" rel="stylesheet" href="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.min.css" />
+
+		<!-- Load polyfills to support older browsers -->
+		<script src="https://polyfill.io/v3/polyfill.min.js?features=es2015%2CIntersectionObserver" crossorigin="anonymous"></script>
+
+		<!-- Load Vue followed by BootstrapVue -->
+	    <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+	    <script src="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.js"></script>
+
+		<!-- Load the following for BootstrapVueIcons support -->
+		<script src="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue-icons.min.js"></script>
+		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+	    <title>Bluetooth Client</title>
+	    <style>
+			.navbar-menu-title {
+				margin: auto;
+	            color: white !important;
+	            font-size: 24px;
+			}
+			.label {
+				font-size: 18px;
+			}
+	    </style>
+	</head>
+	<body>
+	    <!-- Our application root element -->
+	    <div id="app">
+	        <b-navbar type="dark" variant="primary">
+	            <div class="navbar-menu-title">Bluetooth Client</div>
+			</b-navbar>			
+			<b-overlay :show="loading1" variant="light" opacity="0.6" rounded="sm" />
+			<b-form>
+				<label class="ml-5 label">Apparaat</label>
+				<b-form-select v-model="device" :options="devices" class="ml-5 mt-3"></b-form-select>
+				<b-form-select v-model="command" :options="commands" class="ml-5 mt-3" v-on:input="onSelect"></b-form-select>
+				<b-button class="ml-5" variant="primary" v-on:click="sendCommand" >Stuur opdracht</b-button>
+			</b-form>
+			<b-alert v-show="retrieveResult1 !== ''" :variant=errmsg show>{{ retrieveResult1 }}</b-alert>
+			<b-container fluid>
+				<b-row>
+					<b-col>
+						<label class="mt-2" style="font-weight: bolder;">Data bij opdracht</label>
+						<b-form-textarea v-model="cmddata" placeholder="Enter data" rows="1" max-rows="10" no-resize>
+						</b-form-textarea>
+					</b-col>
+				</b-row>
+				<b-row>
+					<b-col>
+						<label class="mt-2" style="font-weight: bolder;">Antwoord</label>
+						<b-form-textarea v-model="response" rows="15" max-rows="15" no-resize readonly>
+						</b-form-textarea>
+					</b-col>
+				</b-row>
+			</b-container>
+		</div>
+	</body>
+	<script>
+		window.app = new Vue({
+			el: '#app',
+			data: function() {
+				return {
+					retrieveResult1: "",
+					loading1: false,
+					errmsg: "",
+					devices: [
+						{value:null, text:"[kies een tcu]"},
+						{value:"tcu-test", text:"tcu-test"},
+						{value:"tcu-tim", text:"tcu-tim"},
+						{value:"tcu-bjorn", text:"tcu-bjorn"},
+						{value:"tcu-kweek", text:"tcu-kweek"},
+					],
+					device: null,
+					commands: [
+						{value: null, text:"[stuur een opdracht]"},
+						{value:"getProperties", text:"Haal de configuratie op"},
+						{value:"getSensors", text:"Haal sensor waarden op"},
+						{value:"setSensors", text:"Zet sensor waarden vast"},
+						{value:"getState", text:"Haal de status op"},
+						{value:"setDeviceOn", text:"Zet apparaat aan"},
+						{value:"setDeviceOff", text:"Zet apparaat uit"},
+						{value:"setDeviceOnFor", text:"Zet apparaat aan voor een bepaalde tijd"},
+						{value:"setDeviceManualOn", text:"Zet apparaat op handmatige bediening"},
+						{value:"setDeviceManualOff", text:"Zet apparaat op automatische bediening"},
+						{value:"setLifecycleCounter", text:"Zet waarde van levensduurteller"},
+						{value:"getTimersForDevice", text:"Haal de instelling van de tijdklokken op"},
+						{value:"replaceTimers", text:"Vervang de tijdklok instellingen"},
+						{value:"getRuleset", text:"Haal de instelling van de regeling op"},
+						{value:"saveRuleset", text:"Vervang de instelling van de regeling"},
+						{value:"getSprayerRule", text:"Haal de sproei regeling op"},
+						{value:"setSprayerRule", text:"Vervang de sproei regeling"},
+						{value:"getTempTracefiles", text:"Haal de lijst van temperatuur tracefiles op"},
+						{value:"getStateTracefiles", text:"Haal de lijst van status tracefiles op"},
+						{value:"getTemperatureFile", text:"Haal de inhoud van een temperatuur tracefile op"},
+						{value:"getStateFile", text:"Haal de inhoud van een status tracefile op"}
+					],
+					command: null,
+					cmddata: "",
+					response: ""
+				};
+			},
+			computed: {
+			},
+			methods: {
+				getDevices() {
+					this.retrieveResult1 = "";
+					this.loading1 = true;
+					this.devices = [{value:null, text:"[kies een tcu]"}];
+					axios.post("/devices")
+					.then(response => {
+						for (var i = 0; i < response.data.length; i++) {
+							this.devices.push({value:response.data[i],text:response.data[i]});
+						}
+						this.loading1 = false;
+					})
+					.catch(error => {
+						console.log(error.message);
+						this.retrieveResult1 = error.message;
+						this.errmsg = "danger";
+						this.loading1 = false;
+					});
+				},
+				search() {
+					this.getDevices();
+				},
+				onSelect(value) {
+					console.log("New value selected: " + value);
+					this.cmddata = null;
+					switch (value) {
+					case "setSensors":
+						this.cmddata = '{"roomtemp": 0, "terrtemp": 0}';
+						break;
+					case "setDeviceOn":
+						this.cmddata = '{"device": ""}';
+						break;
+					case "setDeviceOnFor":
+						this.cmddata = '{"device": "", "period": 0}';
+						break;
+					case "setDeviceOff":
+						this.cmddata = '{"device": ""}';
+						break;
+					case "setDeviceManualOn":
+						this.cmddata = '{"device": ""}';
+						break;
+					case "setDeviceManualOff":
+						this.cmddata = '{"device": ""}';
+						break;
+					case "setLifecycleCounter":
+						this.cmddata = '{"device": "", "hours": 0}';
+						break;
+					case "getTimersForDevice":
+						this.cmddata = '{"device": ""}';
+						break;
+					case "replaceTimers":
+						this.cmddata =  '[';
+						this.cmddata += '  {"device":"sprayer","index":1,"hour_on":12,"minute_on": 0,"hour_off": 0,"minute_off": 0,"repeat": 1,"period": 15}';
+						this.cmddata += ']';
+						break;
+					case "getRuleset":
+						this.cmddata = '{"rulesetnr": 1}';
+						break;
+					case "saveRuleset":
+						this.cmddata =  '{"terrarium": 1,"active":"yes","from":"10:30","to":"22:15","temp_ideal":26,';
+						this.cmddata += ' "rules": [';
+						this.cmddata += '   {"value": -25,';
+						this.cmddata += '    "actions": [';
+						this.cmddata += '      {"device": "fan_in","on_period": -2},';
+						this.cmddata += '      {"device": "no device","on_period": 0},';
+						this.cmddata += '      {"device": "no device","on_period": 0},';
+						this.cmddata += '      {"device": "no device","on_period": 0}';
+						this.cmddata += '     ],';
+						this.cmddata += '   },';
+						this.cmddata += '   {"value": 28,';
+						this.cmddata += '    "actions": [';
+						this.cmddata += '      {"device": "fan_out","on_period": -2},';
+						this.cmddata += '      {"device": "no device","on_period": 0},';
+						this.cmddata += '      {"device": "no device","on_period": 0},';
+						this.cmddata += '      {"device": "no device","on_period": 0}';
+						this.cmddata += '     ],';
+						this.cmddata += '   }';
+						this.cmddata += ' ]';
+						this.cmddata += '}';
+						break;
+					case "setSprayerRule":
+						this.cmddata =  '{"delay": 15,"actions": [';
+						this.cmddata += '  {"device":"fan_in","on_period":900},';
+						this.cmddata += '  {"device":"fan_out","on_period":900},';
+						this.cmddata += '  {"device":"no device","on_period":0},';
+						this.cmddata += '  {"device":"no device","on_period":0}';
+						this.cmddata += '  ]';
+						this.cmddata += '}';
+						break;
+					case "getTemperatureFile":
+						this.cmddata = '{"file":"20220829"}';
+						break;
+					case "getStateFile":
+						this.cmddata = '{"file":"20220829"}';
+						break;
+					}
+				},
+				sendCommand() {
+					if (this.device !== null && this.command !== null) {
+						this.response = "";
+						this.retrieveResult1 = "";
+						this.loading1 = true;
+						if (this.cmddata !== null) {
+							console.log("Send command '" + this.command + "' to " + this.device + " with data '" + this.cmddata + "'");
+							axios.post("/command/" + this.device + "/" + this.command, JSON.parse(this.cmddata))
+							.then(response => {
+								if (response.data.error !== undefined) {
+									this.retrieveResult1 = response.data.error;
+									this.errmsg = "danger";
+								} else {
+									if (response.data !== "") {
+										this.response = JSON.stringify(response.data);
+									} else {
+										this.response = "No response";
+									}
+								}
+								this.loading1 = false;
+							})
+							.catch(error => {
+								console.log(error);
+								this.retrieveResult1 = error.response.data;
+								this.errmsg = "danger";
+								this.loading1 = false;
+							});
+						} else {
+							console.log("Send command '" + this.command + "' to " + this.device + " with no data");
+							axios.post("/command/" + this.device + "/" + this.command)
+							.then(response => {
+								this.response = JSON.stringify(response.data);
+								this.loading1 = false;
+							})
+							.catch(error => {
+								console.log(error);
+								this.retrieveResult1 = error.response.data;
+								this.errmsg = "danger";
+								this.loading1 = false;
+							});
+
+						}
+					} else {
+						if (this.device === null) {
+							this.retrieveResult1 = "Geen TCU gekozen.";
+						} else {
+							this.retrieveResult1 = "Geen opdracht gekozen.";
+						}
+						this.errmsg = "danger";
+					}
+				}
+			},
+			mounted: function() {
+//				this.getDevices();
+			}
+		})
+	</script>
+</html>
+	
