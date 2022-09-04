@@ -149,6 +149,7 @@ public class BtClient implements DiscoveryListener {
 			if (obj != null) {
 				response = obj.toString();
 		        System.out.println("Response received");
+//		        System.out.println(response);
 			} else {
 				System.out.println("No response received");
 			}

@@ -13,7 +13,7 @@
 		<meta http-equiv="pragma" content="no-cache">
 
 		<!-- Load required Bootstrap and BootstrapVue CSS -->
-		<link type="text/css" rel="stylesheet" href="https://unpkg.com/bootstrap/dist/css/bootstrap.min.css" />
+		<link type="text/css" rel="stylesheet" href="https://unpkg.com/bootstrap@4.5.3/dist/css/bootstrap.min.css" />
 		<link type="text/css" rel="stylesheet" href="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.min.css" />
 
 		<!-- Load polyfills to support older browsers -->
@@ -26,7 +26,7 @@
 		<!-- Load the following for BootstrapVueIcons support -->
 		<script src="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue-icons.min.js"></script>
 		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-	    <title>Bluetooth Client</title>
+	    <title>Bluetooth TCU tester</title>
 	    <style>
 			.navbar-menu-title {
 				margin: auto;
@@ -35,6 +35,18 @@
 			}
 			.label {
 				font-size: 18px;
+				font-weight: bolder;
+				margin-top: 5px;
+			}
+			.success {
+				background-color: #b8f7ad !important;
+			}
+			.danger {
+				background-color: #f7adad !important;
+			}
+			.mytable th,td {
+				padding-left: 5px;
+				padding-right: 5px;
 			}
 	    </style>
 	</head>
@@ -42,32 +54,275 @@
 	    <!-- Our application root element -->
 	    <div id="app">
 	        <b-navbar type="dark" variant="primary">
-	            <div class="navbar-menu-title">Bluetooth Client</div>
+	            <div class="navbar-menu-title">Bluetooth TCU tester</div>
 			</b-navbar>			
 			<b-overlay :show="loading1" variant="light" opacity="0.6" rounded="sm" />
-			<b-form>
-				<label class="ml-5 label">Apparaat</label>
-				<b-form-select v-model="device" :options="devices" class="ml-5 mt-3"></b-form-select>
-				<b-form-select v-model="command" :options="commands" class="ml-5 mt-3" v-on:input="onSelect"></b-form-select>
-				<b-button class="ml-5" variant="primary" v-on:click="sendCommand" >Stuur opdracht</b-button>
-			</b-form>
-			<b-alert v-show="retrieveResult1 !== ''" :variant=errmsg show>{{ retrieveResult1 }}</b-alert>
-			<b-container fluid>
-				<b-row>
-					<b-col>
-						<label class="mt-2" style="font-weight: bolder;">Data bij opdracht</label>
-						<b-form-textarea v-model="cmddata" placeholder="Enter data" rows="1" max-rows="10" no-resize>
-						</b-form-textarea>
-					</b-col>
-				</b-row>
-				<b-row>
-					<b-col>
-						<label class="mt-2" style="font-weight: bolder;">Antwoord</label>
-						<b-form-textarea v-model="response" rows="15" max-rows="15" no-resize readonly>
-						</b-form-textarea>
-					</b-col>
-				</b-row>
-			</b-container>
+			<b-card title="Command">
+				<b-form>
+					<b-container fluid>
+						<b-form-row class="mt-3">
+							<b-col cols="1" class="text-right">
+								<label class="label">TCU</label>
+							</b-col>
+							<b-col cols="1">
+								<b-form-select v-model="tcu" :options="tcus" v-on:input="onSelectTCU"></b-form-select>
+							</b-col>
+							<b-col cols="3">
+								<b-form-select v-model="command" :options="commands" v-on:input="onSelectCmd"></b-form-select>
+							</b-col>
+							<b-col cols="2">
+								<b-button variant="primary" v-on:click="sendCommand" >Send command</b-button>
+							</b-col>
+						</b-form-row>
+					</b-container>
+				</b-form>
+			</b-card>
+			<b-form-textarea :class="errmsg" v-show="retrieveResult1 !== ''" v-model="retrieveResult1" size="sm" rows="1" max-rows="3" no-resize readonly></b-form-textarea>
+			<b-card v-show="showDeviceInput" title="Data for command">
+				<b-form>
+					<b-container fluid>
+						<b-form-row class="mt-3">
+							<b-col cols="1" class="text-right">
+								<label class="label">Device</label>
+							</b-col>
+							<b-col cols="1">
+								<b-form-select v-model="deviceInput.device" :options="deviceList"></b-form-select>
+							</b-col>
+							<b-col v-show="command === 'setDeviceOnFor'" cols="1" class="text-right">
+								<label class="label">Period</label>
+							</b-col>
+							<b-col v-show="command === 'setDeviceOnFor'" cols="1">
+								<b-form-input v-model="deviceInput.period" type="number" number class="form-control"></b-form-input>
+							</b-col>
+							<b-col v-show="command === 'setDeviceOnFor'" cols="1">
+								<label class="label">seconds</label>
+							</b-col>
+							<b-col v-show="command === 'setLifecycleCounter'" cols="1" class="text-right">
+								<label class="label">Hours</label>
+							</b-col>
+							<b-col v-show="command === 'setLifecycleCounter'" cols="1">
+								<b-form-input v-model="deviceInput.hours" type="number" number></b-form-input>
+							</b-col>
+						</b-form-row>
+					</b-container>
+				</b-form>
+			</b-card>
+			<b-card v-show="showSensorInput" title="Data for command">
+				<b-form>
+					<b-container fluid>
+						<b-form-row class="mt-3">
+							<b-col cols="1"></b-col>
+							<b-col cols="1" class="text-right">
+								<label class="label">Room temp</label>
+							</b-col>
+							<b-col cols="1">
+								<b-form-input v-model="sensorInput.roomtemp" type="number" number class="form-control"></b-form-input>
+							</b-col>
+							<b-col cols="2" class="text-right">
+								<label class="label">Terrarium temp</label>
+							</b-col>
+							<b-col cols="1">
+								<b-form-input v-model="sensorInput.terrtemp" type="number" number class="form-control"></b-form-input>
+							</b-col>
+						</b-form-row>
+					</b-container>
+				</b-form>
+			</b-card>
+			<b-card v-show="showTimersInput" title="Data for command">
+				<b-form>
+					<div v-for="n in 10">
+						<div v-show="ti[n-1]">
+							<label class="label">Device</label>
+							<b-select v-model="timersInput[n-1].device" :options="deviceList" style="width:auto;"></b-select>
+							<label class="label ml-3">Index</label>
+							<input v-model="timersInput[n-1].index" type="number" style="width:40px;"></input>
+							<label class="label ml-3">On (hh:mm)</label>
+							<input v-model="timersInput[n-1].on" style="width:70px;"></input>
+							<label class="label ml-3">Off (hh:mm)</label>
+							<input v-model="timersInput[n-1].off" style="width:70px;"></input>
+							<label class="label ml-3">Repeat</label>
+							<input v-model="timersInput[n-1].repeat" type="number" style="width:40px;"></input>
+							<label class="label ml-3">Period</label>
+							<input v-model="timersInput[n-1].period" type="number" style="width:40px;"></input>
+							<b-button variant="primary" v-on:click="showTimerInput(n)" >+</b-button>
+							<b-button variant="primary" v-on:click="removeTimerInput(n-1)" >-</b-button>
+						</div>
+					</div>
+				</b-form>
+			</b-card>
+			<b-card v-show="showRulesetInput" title="Data for command">
+				<b-form>
+					<label class="label">Ruleset nr</label>
+					<input v-model="rulesetnr" type="number" style="width:40px;"></input>
+					<div v-show="command === 'saveRuleset'">
+						<label class="label ml-3">Active</label>
+						<input v-model="rulesetInput.active" type="checkbox" style="width:40px;"></input>
+						<label class="label ml-3">from (hh:mm)</label>
+						<input v-model="rulesetInput.from" style="width:70px;"></input>
+						<label class="label ml-3">to (hh:mm)</label>
+						<input v-model="rulesetInput.to" style="width:70px;"></input>
+						<label class="label ml-3">Ideal temp</label>
+						<input v-model="rulesetInput.temp_ideal" type="number" style="width:40px;"></input>
+						<br/>
+						<label class="label ml-3">Rules</label>
+						<br/>
+						<label class="label ml-4">Value</label>
+						<input v-model="rulesetInput.rules[0].value" type="number" style="width:50px;"></input>
+						<label class="label ml-4">Actions:</label>
+						<label class="label ml-3">Device</label>
+						<b-select v-model="rules[0][0].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[0][0].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[0][1].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[0][1].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[0][2].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[0][2].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[0][3].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[0][3].period" type="number" style="width:60px;"></input>
+						<br/>
+						<label class="label ml-4">Value</label>
+						<input v-model="rulesetInput.rules[1].value" type="number" style="width:50px;"></input>
+						<label class="label ml-4">Actions:</label>
+						<label class="label ml-3">Device</label>
+						<b-select v-model="rules[1][0].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[1][0].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[1][1].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[1][1].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[1][2].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[1][2].period" type="number" style="width:60px;"></input>
+						<label class="label ml-5">Device</label>
+						<b-select v-model="rules[1][3].device" :options="actionDeviceList" style="width:auto;"></b-select>
+						<label class="label ml-1">Period</label>
+						<input v-model="rules[1][3].period" type="number" style="width:60px;"></input>
+					</div>
+				</b-form>
+			</b-card>
+			<b-card v-show="showSprayerRuleInput" title="Data for command">
+				<b-form>
+					<label class="label">Delay (minutes)</label>
+					<input v-model="sprayerRuleInput.delay" type="number" style="width:40px;"></input>
+					<label class="label ml-4">Actions:</label>
+					<label class="label ml-3">Device</label>
+					<b-select v-model="sprayerRuleInput.actions[0].device" :options="actionDeviceList" style="width:auto;"></b-select>
+					<label class="label ml-1">Period</label>
+					<input v-model="sprayerRuleInput.actions[0].on_period" type="number" style="width:60px;"></input>
+					<label class="label ml-5">Device</label>
+					<b-select v-model="sprayerRuleInput.actions[1].device" :options="actionDeviceList" style="width:auto;"></b-select>
+					<label class="label ml-1">Period</label>
+					<input v-model="sprayerRuleInput.actions[1].on_period" type="number" style="width:60px;"></input>
+					<label class="label ml-5">Device</label>
+					<b-select v-model="sprayerRuleInput.actions[2].device" :options="actionDeviceList" style="width:auto;"></b-select>
+					<label class="label ml-1">Period</label>
+					<input v-model="sprayerRuleInput.actions[2].on_period" type="number" style="width:60px;"></input>
+					<label class="label ml-5">Device</label>
+					<b-select v-model="sprayerRuleInput.actions[3].device" :options="actionDeviceList" style="width:auto;"></b-select>
+					<label class="label ml-1">Period</label>
+					<input v-model="sprayerRuleInput.actions[3].on_period" type="number" style="width:60px;"></input>
+				</b-form>
+			</b-card>
+			<b-card v-show="showTemperatureTraceInput" title="Data for command">
+				<b-form>
+					<label class="label">Temperature trace file</label>
+					<b-select v-model="tempFname" :options="tempFileList" style="width:auto;"></b-select>
+				</b-form>
+			</b-card>
+			<b-card v-show="showStateTraceInput" title="Data for command">
+				<b-form>
+					<label class="label">State trace file</label>
+					<b-select v-model="stateFname" :options="stateFileList" style="width:auto;"></b-select>
+				</b-form>
+			</b-card>
+			<b-card v-show="showStateResponse" title="Response">
+				<table class="mytable" border="1">
+					<tr>
+						<th>Manual</th><th>Device</th><th>On</th><th></th><th>Expires after</th>
+					</tr>
+					<tr v-for="n in stateResponse.length">
+    					<td style="text-align: center;"><b-form-checkbox v-model="stateResponse[n-1].manual" name="check-button" switch readonly></b-form-checkbox></td>
+						<td>{{stateResponse[n-1].device}}</td>
+    					<td style="text-align: center;"><b-form-checkbox v-model="stateResponse[n-1].state" name="check-button" switch></b-form-checkbox></td>
+						<td>{{stateResponse[n-1].end_time}}</td>
+						<td v-show="stateResponse[n-1].hours_on > 0">{{stateResponse[n-1].hours_on}}</td>
+					</tr>
+				</table>
+			</b-card>
+			<b-card v-show="showTimersResponse" title="Response">
+				<table class="mytable" border="1">
+					<tr>
+						<th>Device</th><th>on at</th><th>off at</th><th>repeat</th><th>period</th>
+					</tr>
+					<tr v-for="n in timersResponse.length">
+						<td>{{timersResponse[n-1].device}}</td>
+						<td>{{timersResponse[n-1].on}}</td>
+						<td>{{timersResponse[n-1].off}}</td>
+						<td>{{timersResponse[n-1].repeat}}</td>
+						<td>{{timersResponse[n-1].period}}</td>
+					</tr>
+				</table>
+			</b-card>
+			<b-card v-show="showRulesetResponse" title="Response">
+				<label class="label">Active?</label> {{rulesetResponse.active}} 
+				<label class="label ml-3">From:</label> {{rulesetResponse.from}} 
+				<label class="label ml-3">To:</label> {{rulesetResponse.to}}
+				<label class="label ml-3">Ideal temp:</label> {{rulesetResponse.temp_ideal}}
+				<table class="mytable">
+					<tr>
+						<th>Rule 1</th><th>Rule 2</th>
+					</tr>
+					<tr>
+						<td>
+							<label class="label">Temp below:</label> {{-rulesetResponse.rules[0].value}}
+							<table class="mytable" border="1">
+								<tr>
+									<th>Device</th><th>period</th>
+								</tr>
+								<tr v-for="n in 4">
+									<td>{{rulesetResponse.rules[0].actions[n-1].device}}</td>
+									<td>{{rulesetResponse.rules[0].actions[n-1].on_period}}</td>
+								</tr>
+							</table>
+						</td>
+						<td>
+							<label class="label">Temp above:</label> {{rulesetResponse.rules[1].value}}
+							<table class="mytable" border="1">
+								<tr>
+									<th>Device</th><th>period</th>
+								</tr>
+								<tr v-for="n in 4">
+									<td>{{rulesetResponse.rules[1].actions[n-1].device}}</td>
+									<td>{{rulesetResponse.rules[1].actions[n-1].on_period}}</td>
+								</tr>
+							</table>
+						</td>
+					</tr>
+				</table>
+			</b-card>
+			<b-card v-show="showSprayerRuleResponse" title="Response">
+				<label class="label">Delay (min):</label> {{sprayerRuleResponse.delay}}
+				<table class="mytable" border="1">
+					<tr>
+						<th>Device</th><th>period (sec)</th>
+					</tr>
+					<tr v-for="n in 4">
+						<td>{{sprayerRuleResponse.actions[n-1].device}}</td>
+						<td>{{sprayerRuleResponse.actions[n-1].on_period}}</td>
+					</tr>
+				</table>
+			</b-card>
+			<b-card v-show="showResponse" title="Response">
+				<b-form-textarea v-model="response" rows="15" max-rows="15" no-resize readonly size="sm"></b-form-textarea>
+			</b-card>
 		</div>
 	</body>
 	<script>
@@ -78,177 +333,460 @@
 					retrieveResult1: "",
 					loading1: false,
 					errmsg: "",
-					devices: [
-						{value:null, text:"[kies een tcu]"},
+					tcus: [
+						{value:null, text:"[select]"},
 						{value:"tcu-test", text:"tcu-test"},
 						{value:"tcu-tim", text:"tcu-tim"},
 						{value:"tcu-bjorn", text:"tcu-bjorn"},
 						{value:"tcu-kweek", text:"tcu-kweek"},
 					],
-					device: null,
+					tcu: null,
 					commands: [
-						{value: null, text:"[stuur een opdracht]"},
-						{value:"getProperties", text:"Haal de configuratie op"},
-						{value:"getSensors", text:"Haal sensor waarden op"},
-						{value:"setSensors", text:"Zet sensor waarden vast"},
-						{value:"getState", text:"Haal de status op"},
-						{value:"setDeviceOn", text:"Zet apparaat aan"},
-						{value:"setDeviceOff", text:"Zet apparaat uit"},
-						{value:"setDeviceOnFor", text:"Zet apparaat aan voor een bepaalde tijd"},
-						{value:"setDeviceManualOn", text:"Zet apparaat op handmatige bediening"},
-						{value:"setDeviceManualOff", text:"Zet apparaat op automatische bediening"},
-						{value:"setLifecycleCounter", text:"Zet waarde van levensduurteller"},
-						{value:"getTimersForDevice", text:"Haal de instelling van de tijdklokken op"},
-						{value:"replaceTimers", text:"Vervang de tijdklok instellingen"},
-						{value:"getRuleset", text:"Haal de instelling van de regeling op"},
-						{value:"saveRuleset", text:"Vervang de instelling van de regeling"},
-						{value:"getSprayerRule", text:"Haal de sproei regeling op"},
-						{value:"setSprayerRule", text:"Vervang de sproei regeling"},
-						{value:"getTempTracefiles", text:"Haal de lijst van temperatuur tracefiles op"},
-						{value:"getStateTracefiles", text:"Haal de lijst van status tracefiles op"},
-						{value:"getTemperatureFile", text:"Haal de inhoud van een temperatuur tracefile op"},
-						{value:"getStateFile", text:"Haal de inhoud van een status tracefile op"}
+						{value: null, text:"[select a command]"},
+						{value:"getSensors", text:"Get sensor values"},
+						{value:"setSensors", text:"Set sensor values"},
+						{value:"getState", text:"Get device status"},
+						{value:"setDeviceOn", text:"Switch device on"},
+						{value:"setDeviceOff", text:"Switch device off"},
+						{value:"setDeviceOnFor", text:"Switch device on for some time"},
+						{value:"setDeviceManualOn", text:"Manipulate device manually"},
+						{value:"setDeviceManualOff", text:"Release device"},
+						{value:"setLifecycleCounter", text:"Set lifecyclecounter of a device"},
+						{value:"getTimersForDevice", text:"Get timer configurations of a device"},
+						{value:"replaceTimers", text:"Replace timer configurations"},
+						{value:"getRuleset", text:"Get a ruleset"},
+						{value:"saveRuleset", text:"Replace a ruleset"},
+						{value:"getSprayerRule", text:"Get sprayer rule"},
+						{value:"setSprayerRule", text:"Replace sprayer rule"},
+						{value:"getTemperatureFile", text:"Get the content of a temperature tracefile"},
+						{value:"getStateFile", text:"Get the content of a status tracefile"}
 					],
 					command: null,
 					cmddata: "",
-					response: ""
-				};
+					response: "",
+					devices: [],
+					deviceList: [],
+					showJson: false,
+					showDeviceInput: false,
+					deviceInput: {device:null},
+					showSensorInput: false,
+					sensorInput: {},
+					showTimersInput: false,
+					timersInput: [
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+						{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0}
+					],
+					ti: [false, false, false, false, false, false, false, false, false, false],
+					showRulesetInput: false,
+					rulesetnr: 0,
+					rulesetInput: {terrarium:1,active:true,from:"06:00",to:"22:00",temp_ideal:26,
+							rules:[{value:-25, actions:[{}]}, {value:28, actions:[{}]}]},
+					rules: [[{device:"fan_in"},{device:"fan_out"},{device:"no device"},{device:"no device"}],[{device:"no device"},{device:"no device"},{device:"no device"},{device:"no device"}]],
+					actionDeviceList: [],
+					showSprayerRuleInput: false,
+					sprayerRuleInput: {delay:15,actions:[
+						{device:"fan_in",on_period:900},
+						{device:"fan_out",on_period:900},
+						{device:"no device",on_period:0},
+						{device:"no device",on_period:0}
+					]},
+					showTemperatureTraceInput: false,
+					showStateTraceInput: false,
+					tempFileList: [],
+					tempFname: null,
+					stateFileList: [],
+					stateFname: null,
+					showResponse: false,
+					showStateResponse: false,
+					stateResponse:[{device:"", state:false, manual:false, end_time:"", hours_on:0}],
+					showTimersResponse: false,
+					timersResponse:[{device:"",hours_on:9,minute_on:0,hour_off:21,minute_off:0,repeat:1,period:0}],
+					showRulesetResponse: false,
+					rulesetResponse:{rules:[{actions:[{},{},{},{}]},{actions:[{},{},{},{}]}]},
+					showSprayerRuleResponse: false,
+					sprayerRuleResponse:{actions:[{},{},{},{}]}
+				}; 
 			},
 			computed: {
 			},
 			methods: {
-				getDevices() {
-					this.retrieveResult1 = "";
-					this.loading1 = true;
-					this.devices = [{value:null, text:"[kies een tcu]"}];
-					axios.post("/devices")
-					.then(response => {
-						for (var i = 0; i < response.data.length; i++) {
-							this.devices.push({value:response.data[i],text:response.data[i]});
+				onSelectTCU(value) {
+					this.response = null;
+					this.showResponse = false;
+					this.tcu = value;
+					this.getProperties();
+				},
+				onSelectCmd(value) {
+					this.showResponse = false;
+					this.showStateResponse = false;
+					this.showTimersResponse = false;
+					this.showRulesetResponse = false;
+					this.showSprayerRuleResponse = false;
+					this.response = null;
+					this.deviceInput.device = null;
+					this.cmddata = null;
+					this.showDeviceInput = false;
+					this.showSensorInput = false;
+					this.showTimersInput = false;
+					this.showRulesetInput = false;
+					this.showSprayerRuleInput = false;
+					this.showTemperatureTraceInput = false;
+					this.showStateTraceInput = false;
+					switch (value) {
+					case "setSensors":
+						this.showSensorInput = true;
+						this.sensorInput = {};
+						break;
+					case "getState":
+						this.showResponse = false;
+						break;
+					case "setDeviceOn":
+						this.showDeviceInput = true;
+						break;
+					case "setDeviceOnFor":
+						this.showDeviceInput = true;
+						break;
+					case "setDeviceOff":
+						this.showDeviceInput = true;
+						break;
+					case "setDeviceManualOn":
+						this.showDeviceInput = true;
+						break;
+					case "setDeviceManualOff":
+						this.showDeviceInput = true;
+						break;
+					case "setLifecycleCounter":
+						this.showDeviceInput = true;
+						break;
+					case "getTimersForDevice":
+						this.showDeviceInput = true;
+						break;
+					case "replaceTimers":
+						this.showTimersInput = true,
+						this.ti[0] = true;
+						this.timersInput =[
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0},
+							{device:null,index:0,hour_on:0,minute_on:0,hour_off:0,minute_off:0,repeat:1,period:0}
+						];
+						break;
+					case "getRuleset":
+						this.showResponse = false;
+						this.showRulesetInput = true;
+						break;
+					case "saveRuleset":
+						this.showRulesetInput = true;
+						this.actionDeviceList = [];
+						this.actionDeviceList.push("no device");
+						for (var i=0; i<this.devices.length; i++) {
+							this.actionDeviceList.push(this.devices[i].device);
 						}
+						this.rulesetInput = {terrarium:1,active:true,from:"06:00",to:"22:00",temp_ideal:26,
+							rules:[{value:-25, actions:[{}]}, {value:28, actions:[{}]}]};
+						this.rules = [[{device:"fan_in",period:-2},{device:"no device"},{device:"no device"},{device:"no device"}],
+							[{device:"fan_out",period:-2},{device:"no device"},{device:"no device"},{device:"no device"}]];
+						break;
+					case "setSprayerRule":
+						this.showResponse = false;
+						this.showSprayerRuleInput = true;
+						this.actionDeviceList = [];
+						this.actionDeviceList.push("no device");
+						for (var i=0; i<this.devices.length; i++) {
+							this.actionDeviceList.push(this.devices[i].device);
+						}
+						this.sprayerRuleInput = {delay:15,actions:[
+							{device:"fan_in",on_period:900},
+							{device:"fan_out",on_period:900},
+							{device:"no device",on_period:0},
+							{device:"no device",on_period:0}
+						]};
+						break;
+					case "getTemperatureFile":
+						this.showResponse = true;
+						this.showTemperatureTraceInput = true;
+						this.getTempFileList();
+						break;
+					case "getStateFile":
+						this.showResponse = true;
+						this.showStateTraceInput = true;
+						this.getStateFileList();
+						break;
+					default:
+						this.showResponse = true;
+					}
+					this.$forceUpdate();
+				},
+				getProperties() {
+					this.loading1 = true;
+					this.deviceList = [];
+					axios.post("/command/" + this.tcu + "/getProperties")
+					.then(response => {
+						const obj = response.data;
+						this.deviceList.push({text:"[select]", value: null});
+						for (var i = 0; i < obj.devices.length; i++) {
+							this.devices.push(obj.devices[i]);
+							this.deviceList.push({text: obj.devices[i].device, value:obj.devices[i]}); //{"device":"light1","nr_of_timers":1,"lc_counted":false}
+						}
+						this.deviceInput.device = null;
 						this.loading1 = false;
+						this.response = null;
 					})
 					.catch(error => {
-						console.log(error.message);
-						this.retrieveResult1 = error.message;
+						this.retrieveResult1 = error.response.data;
 						this.errmsg = "danger";
 						this.loading1 = false;
 					});
 				},
-				search() {
-					this.getDevices();
+				getTempFileList() {
+					this.loading1 = true;
+					this.tempFileList = [];
+					axios.post("/command/" + this.tcu + "/getTempTracefiles")
+					.then(response => {
+						const obj = response.data.files;
+						this.tempFileList.push({text:"[select]", value: null});
+						for (var i = 0; i < obj.length; i++) {
+							this.tempFileList.push(obj[i]);
+						}
+						this.tempFname = null;
+						this.loading1 = false;
+						this.response = null;
+					})
+					.catch(error => {
+						this.retrieveResult1 = error.response.data;
+						this.errmsg = "danger";
+						this.loading1 = false;
+					});
 				},
-				onSelect(value) {
-					console.log("New value selected: " + value);
-					this.cmddata = null;
-					switch (value) {
-					case "setSensors":
-						this.cmddata = '{"roomtemp": 0, "terrtemp": 0}';
-						break;
-					case "setDeviceOn":
-						this.cmddata = '{"device": ""}';
-						break;
-					case "setDeviceOnFor":
-						this.cmddata = '{"device": "", "period": 0}';
-						break;
-					case "setDeviceOff":
-						this.cmddata = '{"device": ""}';
-						break;
-					case "setDeviceManualOn":
-						this.cmddata = '{"device": ""}';
-						break;
-					case "setDeviceManualOff":
-						this.cmddata = '{"device": ""}';
-						break;
-					case "setLifecycleCounter":
-						this.cmddata = '{"device": "", "hours": 0}';
-						break;
-					case "getTimersForDevice":
-						this.cmddata = '{"device": ""}';
-						break;
-					case "replaceTimers":
-						this.cmddata =  '[';
-						this.cmddata += '  {"device":"sprayer","index":1,"hour_on":12,"minute_on": 0,"hour_off": 0,"minute_off": 0,"repeat": 1,"period": 15}';
-						this.cmddata += ']';
-						break;
-					case "getRuleset":
-						this.cmddata = '{"rulesetnr": 1}';
-						break;
-					case "saveRuleset":
-						this.cmddata =  '{"terrarium": 1,"active":"yes","from":"10:30","to":"22:15","temp_ideal":26,';
-						this.cmddata += ' "rules": [';
-						this.cmddata += '   {"value": -25,';
-						this.cmddata += '    "actions": [';
-						this.cmddata += '      {"device": "fan_in","on_period": -2},';
-						this.cmddata += '      {"device": "no device","on_period": 0},';
-						this.cmddata += '      {"device": "no device","on_period": 0},';
-						this.cmddata += '      {"device": "no device","on_period": 0}';
-						this.cmddata += '     ],';
-						this.cmddata += '   },';
-						this.cmddata += '   {"value": 28,';
-						this.cmddata += '    "actions": [';
-						this.cmddata += '      {"device": "fan_out","on_period": -2},';
-						this.cmddata += '      {"device": "no device","on_period": 0},';
-						this.cmddata += '      {"device": "no device","on_period": 0},';
-						this.cmddata += '      {"device": "no device","on_period": 0}';
-						this.cmddata += '     ],';
-						this.cmddata += '   }';
-						this.cmddata += ' ]';
-						this.cmddata += '}';
-						break;
-					case "setSprayerRule":
-						this.cmddata =  '{"delay": 15,"actions": [';
-						this.cmddata += '  {"device":"fan_in","on_period":900},';
-						this.cmddata += '  {"device":"fan_out","on_period":900},';
-						this.cmddata += '  {"device":"no device","on_period":0},';
-						this.cmddata += '  {"device":"no device","on_period":0}';
-						this.cmddata += '  ]';
-						this.cmddata += '}';
-						break;
-					case "getTemperatureFile":
-						this.cmddata = '{"file":"20220829"}';
-						break;
-					case "getStateFile":
-						this.cmddata = '{"file":"20220829"}';
-						break;
-					}
+				getState() {
+					this.loading1 = true;
+					axios.post("/command/" + this.tcu + "/getState")
+					.then(response => {
+						console.log("getState()")
+						this.showStateResponse = true;
+						this.stateResponse = [];
+						var state = response.data.state;
+						for (var i=0; i<state.length; i++) {
+							this.stateResponse.push({
+								device:state[i].device,
+								state:(state[i].state==="on"?true:false),
+								manual:(state[i].manual==="on"?true:false),
+								end_time:state[i].end_time,
+								hours_on:state[i].hours_on})
+						}
+						this.loading1 = false;
+					})
+					.catch(error => {
+						this.retrieveResult1 = error.response.data;
+						this.errmsg = "danger";
+						this.loading1 = false;
+					});
+				},
+				getStateFileList() {
+					this.loading1 = true;
+					this.stateFileList = [];
+					axios.post("/command/" + this.tcu + "/getStateTracefiles")
+					.then(response => {
+						const obj = response.data.files;
+						this.stateFileList.push({text:"[select]", value: null});
+						for (var i = 0; i < obj.length; i++) {
+							this.stateFileList.push(obj[i]);
+						}
+						this.stateFname = null;
+						this.loading1 = false;
+						this.response = null;
+					})
+					.catch(error => {
+						this.retrieveResult1 = error.response.data;
+						this.errmsg = "danger";
+						this.loading1 = false;
+					});
 				},
 				sendCommand() {
-					if (this.device !== null && this.command !== null) {
+					if (this.tcu !== null && this.command !== null) {
+						this.cmddata = {};
 						this.response = "";
 						this.retrieveResult1 = "";
 						this.loading1 = true;
-						if (this.cmddata !== null) {
-							console.log("Send command '" + this.command + "' to " + this.device + " with data '" + this.cmddata + "'");
-							axios.post("/command/" + this.device + "/" + this.command, JSON.parse(this.cmddata))
-							.then(response => {
-								if (response.data.error !== undefined) {
-									this.retrieveResult1 = response.data.error;
-									this.errmsg = "danger";
-								} else {
-									if (response.data !== "") {
-										this.response = JSON.stringify(response.data);
+						if (this.showDeviceInput) {
+							this.cmddata = {device:this.deviceInput.device.device};
+							if (this.deviceInput.period !== undefined) {
+								this.cmddata.period = this.deviceInput.period;
+							}
+							if (this.deviceInput.hours !== undefined) {
+								this.cmddata.hours = this.deviceInput.hours;
+							}
+						}
+						if (this.showSensorInput) {
+							this.cmddata = this.sensorInput;
+						}
+						if (this.showTimersInput) {
+							this.retrieveResult1 = "";
+							this.cmddata.timers = [];
+							var row = 0;
+							for (var i = 0; i < 10; i++) {
+								if (this.ti[i]) {
+									row++;
+									var tmr = {};
+									if (this.timersInput[i].device !== null) {
+										tmr.device = this.timersInput[i].device.device;
+										var nr = this.timersInput[i].device.nr_of_timers;
+										if (this.timersInput[i].index !== undefined) {
+											if (this.timersInput[i].index <= 0 || this.timersInput[i].index > nr) {
+												this.retrieveResult1 += "Index for device '" + this.timersInput[i].device.device + "' must be >0 and <=" + nr + "\n";
+											}
+											tmr.index = Number(this.timersInput[i].index);
+										} else {
+											this.retrieveResult1 += "Index for device '" + this.timersInput[i].device.device + "' must be filled\n";
+										}
+										if (this.timersInput[i].on === undefined) {
+											this.retrieveResult1 += "On time for device '" + this.timersInput[i].device.device + "' must be filled\n";
+										} else {
+											var tmOn = this.timersInput[i].on.split(":");
+											if (tmOn.length != 2) {
+												this.retrieveResult1 += "On time for device '" + this.timersInput[i].device.device + "' must have the format hh:mm\n";
+											} else {
+												var hrs = Number(tmOn[0]);
+												var min = Number(tmOn[1]);
+												if (hrs >= 24 || min >=60 ) {
+													this.retrieveResult1 += "On time for device '" + this.timersInput[i].device.device + "' hours < 24 and/or minutes < 60\n";
+												} 
+												tmr.hour_on = hrs;
+												tmr.minute_on = min;
+											}
+										}
+										if (this.timersInput[i].off === undefined) {
+											this.retrieveResult1 += "Off time for device '" + this.timersInput[i].device.device + "' must be filled\n";
+										} else {
+											var tmOff = this.timersInput[i].off.split(":");
+											if (tmOff.length != 2) {
+												this.retrieveResult1 += "Off time for device '" + this.timersInput[i].device.device + "' must have the format hh:mm\n";
+											} else {
+												hrs = Number(tmOff[0]);
+												min = Number(tmOff[1]);
+												if (hrs >= 24 || min >=60 ) {
+													this.retrieveResult1 += "Off time for device '" + this.timersInput[i].device.device + "' hours < 24 and/or minutes < 60\n";
+												}
+												tmr.hour_off = hrs;
+												tmr.minute_off = min;
+											}
+										}
+										if (this.timersInput[i].repeat === undefined) {
+											this.retrieveResult1 += "Repeat for device '" + this.timersInput[i].device.device + "' must be filled\n";
+										} else {
+											var nr = Number(this.timersInput[i].repeat);
+											if (nr != 1) {
+												this.retrieveResult1 += "Repeat for device '" + this.timersInput[i].device.device + "' must be 1\n";
+											} else {
+												tmr.repeat = nr;
+											}
+										}
+										if (this.timersInput[i].period === undefined) {
+											this.retrieveResult1 += "Period for device '" + this.timersInput[i].device.device + "' must be filled\n";
+										} else {
+											nr = Number(this.timersInput[i].period);
+											if (nr > 3600) {
+												this.retrieveResult1 += "Period for device '" + this.timersInput[i].device.device + "' must be < 3600\n";
+											}
+											tmr.period = nr;
+										}
 									} else {
-										this.response = "No response";
+										this.retrieveResult1 += "No device selected in row " + row + "\n";
 									}
 								}
+							}
+							if (this.retrieveResult1.length > 0) {
+								this.loading1 = false;
+								this.errmsg = "danger";
+								return
+							} else {
+								this.cmddata.timers.push(tmr);
+							}
+						}
+						if (this.showRulesetInput) {
+							this.cmddata = {};
+							if (this.rulesetnr != 1 && this.rulesetnr != 2) {
+								this.retrieveResult1 += "Ruleset number can only be 1 or 2.";
+							} else {
+								this.cmddata.rulesetnr = Number(this.rulesetnr);
+							}
+							if (this.command === "saveRuleset") {
+								for (var r=0; r<2; r++) {
+									this.rulesetInput.rules[r].actions = [];
+									for (var a=0; a<4; a++) {
+										if(this.rules[r][a].device !== "no device" && 
+												(this.rules[r][a].period < 3600 || this.rules[r][a].period == -1 || this.rules[r][a].period == -2)) {
+											this.rulesetInput.rules[r].actions.push({device:this.rules[r][a].device,on_period: Number(this.rules[r][a].period)});
+										} else if(this.rules[r][a].device === "no device") {
+											this.rulesetInput.rules[r].actions.push({device:"no device",on_period:0});
+										} else {
+											this.retrieveResult1 += "Rule " + (r + 1) + " Action " + (a + 1) + " : period must be <3600 sec or -1 or -2.";
+										}
+									}
+								}
+								this.cmddata.ruleset = this.rulesetInput;
+							}
+							if (this.retrieveResult1.length > 0) {
+								this.loading1 = false;
+								this.errmsg = "danger";
+								return
+							}
+							this.rulesetInput.active = this.rulesetInput.active ? "yes" : "no";
+						}
+						if (this.showSprayerRuleInput) {
+							for (var a=0; a<4; a++) {
+								if(this.sprayerRuleInput.actions[a].device !== "no device" && 
+										(this.sprayerRuleInput.actions[a].period >= 3600 && this.sprayerRuleInput.actions[a].period != -1 && this.sprayerRuleInput.actions[a].period != -2)) {
+									this.retrieveResult1 += "Action " + (a + 1) + " : period must be <3600 sec or -1 or -2.";
+								}
+							}
+							if (this.retrieveResult1.length > 0) {
+								this.loading1 = false;
+								this.errmsg = "danger";
+								return
+							}
+							this.cmddata = this.sprayerRuleInput;
+						}
+						if (this.showTemperatureTraceInput) {
+							this.cmddata = {fname: this.tempFname};
+						}
+						if (this.showStateTraceInput) {
+							this.cmddata = {fname: this.stateFname};
+						}
+						if (this.cmddata !== null) {
+//							console.log("Send command '" + this.command + "' to " + this.tcu + " with data '" + JSON.stringify(this.cmddata) + "'");
+							axios.post("/command/" + this.tcu + "/" + this.command, this.cmddata)
+							.then(response => {
+								this.handleResponse(response);
 								this.loading1 = false;
 							})
 							.catch(error => {
-								console.log(error);
 								this.retrieveResult1 = error.response.data;
 								this.errmsg = "danger";
 								this.loading1 = false;
 							});
 						} else {
-							console.log("Send command '" + this.command + "' to " + this.device + " with no data");
-							axios.post("/command/" + this.device + "/" + this.command)
+//							console.log("Send command '" + this.command + "' to " + this.tcu + " with no data");
+							axios.post("/command/" + this.tcu + "/" + this.command)
 							.then(response => {
-								this.response = JSON.stringify(response.data);
+								this.handleResponse(response);
 								this.loading1 = false;
 							})
 							.catch(error => {
-								console.log(error);
 								this.retrieveResult1 = error.response.data;
 								this.errmsg = "danger";
 								this.loading1 = false;
@@ -256,17 +794,111 @@
 
 						}
 					} else {
-						if (this.device === null) {
-							this.retrieveResult1 = "Geen TCU gekozen.";
+						if (this.tcu === null) {
+							this.retrieveResult1 = "No TCU selected.";
 						} else {
-							this.retrieveResult1 = "Geen opdracht gekozen.";
+							this.retrieveResult1 = "No command selected.";
 						}
 						this.errmsg = "danger";
 					}
+				},
+				handleResponse(response) {
+					if (response.data.error !== undefined) {
+						this.retrieveResult1 = response.data.error;
+						this.errmsg = "danger";
+					} else {
+						if (response.data !== "") {
+							this.showStateResponse = false;
+							this.showTimersResponse = false;
+							this.showRulesetResponse = false;
+							this.showSprayerRuleResponse = false;
+							switch (this.command) {
+							case "setDeviceOn":
+								this.getState();
+								break;
+							case "getTemperatureFile":
+							case "getStateFile":
+								this.response = response.data.content;
+								break;
+							case "getState":
+								this.showStateResponse = true;
+								this.stateResponse = [];
+								var state = response.data.state;
+								for (var i=0; i<state.length; i++) {
+									this.stateResponse.push({
+										device:state[i].device,
+										state:(state[i].state==="on"?true:false),
+										manual:(state[i].manual==="yes"?true:false),
+										end_time:state[i].end_time,
+										hours_on:state[i].hours_on})
+								}
+								break;
+							case "getTimersForDevice":
+								this.showTimersResponse = true;
+								this.timersResponse = [];
+								var timers = response.data.timers;
+								for (var i=0; i<timers.length; i++) {
+									var on = timers[i].hour_on.toString().padStart(2, '0') + ":" + timers[i].minute_on.toString().padStart(2, '0');
+									var off = "";
+									if (timers[i].period == 0) {
+										off = timers[i].hour_off.toString().padStart(2, '0') + ":" + timers[i].minute_off.toString().padStart(2, '0')
+									} else {
+										off = "";
+									}
+									this.timersResponse.push({
+										device:timers[i].device,
+										on:on,
+										off:off,
+										repeat:timers[i].repeat,
+										period:timers[i].period})
+								}
+								break;
+							case "getRuleset":
+								this.showRulesetResponse = true;
+								this.rulesetResponse = response.data;
+								break;
+							case "getSprayerRule":
+								this.showSprayerRuleResponse = true;
+								this.sprayerRuleResponse = response.data;
+							default:
+								this.response = JSON.stringify(response.data, null, 2);
+							}
+						} else {
+							switch (this.command) {
+							case "setDeviceOn":
+								this.getState();
+								break;
+							case "setDeviceOff":
+								this.getState();
+								break;
+							case "setDeviceOnFor":
+								this.getState();
+								break;
+							case "setDeviceManualOn":
+								this.getState();
+								break;
+							case "setDeviceManualOff":
+								this.getState();
+								break;
+							case "setLifecycleCounter":
+								this.getState();
+								break;
+							}
+							this.response = "No response";
+						}
+					}
+				},
+				showTimerInput(ix) {
+					this.ti[ix] = true;
+					this.$forceUpdate();
+				},
+				removeTimerInput(ix) {
+					this.ti[ix] = false;
+					this.$forceUpdate();
 				}
 			},
 			mounted: function() {
-//				this.getDevices();
+				
 			}
 		})
 	</script>
